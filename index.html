@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Ping Pong</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        .neon-text {
+            text-shadow: 0 0 5px #fff, 0 0 10px #fff, 0 0 15px #0073e6, 0 0 20px #0073e6;
+        }
+        
+        .neon-border {
+            box-shadow: 0 0 5px #fff, 0 0 10px #fff, 0 0 15px #0073e6, 0 0 20px #0073e6;
+        }
+        
+        .paddle {
+            transition: transform 0.1s ease-out;
+        }
+        
+        .ball {
+            transition: transform 0.3s linear;
+        }
+        
+        .score-pulse {
+            animation: pulse 1.5s infinite;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen flex flex-col items-center justify-center overflow-hidden">
+    <div class="absolute top-4 left-4">
+        <button id="soundToggle" class="bg-blue-900 hover:bg-blue-800 text-white p-2 rounded-full transition-all">
+            <i class="fas fa-volume-up text-xl"></i>
+        </button>
+    </div>
+    
+    <h1 class="neon-text text-5xl font-bold mb-8 tracking-wider">NEON PING PONG</h1>
+    
+    <div class="relative w-full max-w-3xl h-96 bg-gray-800 rounded-lg overflow-hidden border-2 border-blue-500 neon-border mb-8" id="gameContainer">
+        <div class="absolute w-4 h-16 bg-blue-500 rounded-lg left-4 top-1/2 transform -translate-y-1/2 paddle" id="playerPaddle"></div>
+        <div class="absolute w-4 h-16 bg-red-500 rounded-lg right-4 top-1/2 transform -translate-y-1/2 paddle" id="computerPaddle"></div>
+        <div class="absolute w-4 h-4 bg-white rounded-full ball" id="ball"></div>
+        
+        <div class="absolute top-0 left-0 w-full h-full flex items-center justify-center">
+            <div class="w-px h-full bg-blue-400 opacity-30"></div>
+        </div>
+    </div>
+    
+    <div class="flex justify-between w-full max-w-3xl mb-8">
+        <div class="text-center">
+            <div class="text-2xl font-mono mb-2">PLAYER</div>
+            <div class="text-6xl font-bold text-blue-400 score-pulse" id="playerScore">0</div>
+        </div>
+        <div class="text-center">
+            <div class="text-2xl font-mono mb-2">COMPUTER</div>
+            <div class="text-6xl font-bold text-red-400 score-pulse" id="computerScore">0</div>
+        </div>
+    </div>
+    
+    <div class="flex space-x-4">
+        <button id="startBtn" class="bg-green-600 hover:bg-green-500 text-white px-6 py-3 rounded-lg font-bold text-lg transition-all flex items-center">
+            <i class="fas fa-play mr-2"></i> START GAME
+        </button>
+        <button id="resetBtn" class="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-lg font-bold text-lg transition-all flex items-center">
+            <i class="fas fa-redo mr-2"></i> RESET
+        </button>
+    </div>
+    
+    <div class="mt-8 text-gray-400 text-sm">
+        <p>Use <span class="text-blue-400">mouse</span> or <span class="text-blue-400">touch</span> to move your paddle</p>
+    </div>
+    
+    <audio id="paddleSound" src="https://assets.mixkit.co/sfx/preview/mixkit-arcade-game-jump-coin-216.mp3" preload="auto"></audio>
+    <audio id="wallSound" src="https://assets.mixkit.co/sfx/preview/mixkit-unlock-game-notification-253.mp3" preload="auto"></audio>
+    <audio id="scoreSound" src="https://assets.mixkit.co/sfx/preview/mixkit-winning-chimes-2015.mp3" preload="auto"></audio>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Game elements
+            const gameContainer = document.getElementById('gameContainer');
+            const playerPaddle = document.getElementById('playerPaddle');
+            const computerPaddle = document.getElementById('computerPaddle');
+            const ball = document.getElementById('ball');
+            const playerScoreDisplay = document.getElementById('playerScore');
+            const computerScoreDisplay = document.getElementById('computerScore');
+            const startBtn = document.getElementById('startBtn');
+            const resetBtn = document.getElementById('resetBtn');
+            const soundToggle = document.getElementById('soundToggle');
+            
+            // Sound elements
+            const paddleSound = document.getElementById('paddleSound');
+            const wallSound = document.getElementById('wallSound');
+            const scoreSound = document.getElementById('scoreSound');
+            let soundEnabled = true;
+            
+            // Game state
+            let gameRunning = false;
+            let playerScore = 0;
+            let computerScore = 0;
+            let ballX = 0;
+            let ballY = 0;
+            let ballSpeedX = 0;
+            let ballSpeedY = 0;
+            let playerPaddleY = 0;
+            let computerPaddleY = 0;
+            let animationFrameId = null;
+            
+            // Game constants
+            const PADDLE_HEIGHT = 64;
+            const PADDLE_WIDTH = 16;
+            const BALL_SIZE = 16;
+            const INITIAL_BALL_SPEED = 5;
+            const COMPUTER_PADDLE_SPEED = 4;
+            
+            // Initialize game
+            function initGame() {
+                const containerRect = gameContainer.getBoundingClientRect();
+                const containerHeight = containerRect.height;
+                const containerWidth = containerRect.width;
+                
+                // Position paddles
+                playerPaddleY = containerHeight / 2 - PADDLE_HEIGHT / 2;
+                computerPaddleY = containerHeight / 2 - PADDLE_HEIGHT / 2;
+                
+                // Position ball in center
+                ballX = containerWidth / 2 - BALL_SIZE / 2;
+                ballY = containerHeight / 2 - BALL_SIZE / 2;
+                
+                // Random initial direction
+                const angle = Math.random() * Math.PI / 2 - Math.PI / 4;
+                ballSpeedX = INITIAL_BALL_SPEED * (Math.random() > 0.5 ? 1 : -1);
+                ballSpeedY = INITIAL_BALL_SPEED * Math.sin(angle);
+                
+                updatePositions();
+            }
+            
+            // Update positions of all elements
+            function updatePositions() {
+                playerPaddle.style.top = `${playerPaddleY}px`;
+                computerPaddle.style.top = `${computerPaddleY}px`;
+                ball.style.left = `${ballX}px`;
+                ball.style.top = `${ballY}px`;
+            }
+            
+            // Game loop
+            function gameLoop() {
+                if (!gameRunning) return;
+                
+                const containerRect = gameContainer.getBoundingClientRect();
+                const containerHeight = containerRect.height;
+                const containerWidth = containerRect.width;
+                
+                // Move ball
+                ballX += ballSpeedX;
+                ballY += ballSpeedY;
+                
+                // Ball collision with top and bottom walls
+                if (ballY <= 0 || ballY + BALL_SIZE >= containerHeight) {
+                    ballSpeedY = -ballSpeedY;
+                    playSound(wallSound);
+                    
+                    // Add some randomness to bounce
+                    ballSpeedY *= (0.9 + Math.random() * 0.2);
+                }
+                
+                // Ball collision with paddles
+                // Player paddle
+                if (
+                    ballX <= PADDLE_WIDTH && 
+                    ballY + BALL_SIZE >= playerPaddleY && 
+                    ballY <= playerPaddleY + PADDLE_HEIGHT
+                ) {
+                    ballSpeedX = Math.abs(ballSpeedX) * 1.05; // Speed up slightly
+                    
+                    // Calculate bounce angle based on where ball hits paddle
+                    const hitPosition = (ballY - playerPaddleY) / PADDLE_HEIGHT;
+                    ballSpeedY = (hitPosition - 0.5) * 10;
+                    
+                    playSound(paddleSound);
+                }
+                
+                // Computer paddle
+                if (
+                    ballX + BALL_SIZE >= containerWidth - PADDLE_WIDTH && 
+                    ballY + BALL_SIZE >= computerPaddleY && 
+                    ballY <= computerPaddleY + PADDLE_HEIGHT
+                ) {
+                    ballSpeedX = -Math.abs(ballSpeedX) * 1.05; // Speed up slightly
+                    
+                    // Calculate bounce angle based on where ball hits paddle
+                    const hitPosition = (ballY - computerPaddleY) / PADDLE_HEIGHT;
+                    ballSpeedY = (hitPosition - 0.5) * 10;
+                    
+                    playSound(paddleSound);
+                }
+                
+                // Scoring
+                if (ballX < 0) {
+                    computerScore++;
+                    computerScoreDisplay.textContent = computerScore;
+                    resetBall();
+                    playSound(scoreSound);
+                } else if (ballX + BALL_SIZE > containerWidth) {
+                    playerScore++;
+                    playerScoreDisplay.textContent = playerScore;
+                    resetBall();
+                    playSound(scoreSound);
+                }
+                
+                // Computer AI - follow ball with some imperfection
+                const computerPaddleCenter = computerPaddleY + PADDLE_HEIGHT / 2;
+                const ballCenter = ballY + BALL_SIZE / 2;
+                
+                if (computerPaddleCenter < ballCenter - 10) {
+                    computerPaddleY += COMPUTER_PADDLE_SPEED * (0.7 + Math.random() * 0.3);
+                } else if (computerPaddleCenter > ballCenter + 10) {
+                    computerPaddleY -= COMPUTER_PADDLE_SPEED * (0.7 + Math.random() * 0.3);
+                }
+                
+                // Keep computer paddle within bounds
+                computerPaddleY = Math.max(0, Math.min(containerHeight - PADDLE_HEIGHT, computerPaddleY));
+                
+                updatePositions();
+                animationFrameId = requestAnimationFrame(gameLoop);
+            }
+            
+            // Reset ball to center after scoring
+            function resetBall() {
+                const containerRect = gameContainer.getBoundingClientRect();
+                ballX = containerRect.width / 2 - BALL_SIZE / 2;
+                ballY = containerRect.height / 2 - BALL_SIZE / 2;
+                
+                // Short pause before next serve
+                gameRunning = false;
+                setTimeout(() => {
+                    // Random direction
+                    const angle = Math.random() * Math.PI / 2 - Math.PI / 4;
+                    ballSpeedX = INITIAL_BALL_SPEED * (Math.random() > 0.5 ? 1 : -1);
+                    ballSpeedY = INITIAL_BALL_SPEED * Math.sin(angle);
+                    gameRunning = true;
+                    gameLoop();
+                }, 1000);
+            }
+            
+            // Play sound if enabled
+            function playSound(sound) {
+                if (soundEnabled) {
+                    sound.currentTime = 0;
+                    sound.play();
+                }
+            }
+            
+            // Event listeners
+            gameContainer.addEventListener('mousemove', (e) => {
+                if (!gameRunning) return;
+                
+                const containerRect = gameContainer.getBoundingClientRect();
+                const mouseY = e.clientY - containerRect.top;
+                
+                playerPaddleY = mouseY - PADDLE_HEIGHT / 2;
+                
+                // Keep paddle within bounds
+                playerPaddleY = Math.max(0, Math.min(containerRect.height - PADDLE_HEIGHT, playerPaddleY));
+                
+                updatePositions();
+            });
+            
+            gameContainer.addEventListener('touchmove', (e) => {
+                if (!gameRunning) return;
+                e.preventDefault();
+                
+                const containerRect = gameContainer.getBoundingClientRect();
+                const touchY = e.touches[0].clientY - containerRect.top;
+                
+                playerPaddleY = touchY - PADDLE_HEIGHT / 2;
+                
+                // Keep paddle within bounds
+                playerPaddleY = Math.max(0, Math.min(containerRect.height - PADDLE_HEIGHT, playerPaddleY));
+                
+                updatePositions();
+            }, { passive: false });
+            
+            startBtn.addEventListener('click', () => {
+                if (!gameRunning) {
+                    gameRunning = true;
+                    startBtn.innerHTML = '<i class="fas fa-pause mr-2"></i> PAUSE';
+                    gameLoop();
+                } else {
+                    gameRunning = false;
+                    startBtn.innerHTML = '<i class="fas fa-play mr-2"></i> RESUME';
+                    cancelAnimationFrame(animationFrameId);
+                }
+            });
+            
+            resetBtn.addEventListener('click', () => {
+                gameRunning = false;
+                cancelAnimationFrame(animationFrameId);
+                playerScore = 0;
+                computerScore = 0;
+                playerScoreDisplay.textContent = '0';
+                computerScoreDisplay.textContent = '0';
+                startBtn.innerHTML = '<i class="fas fa-play mr-2"></i> START GAME';
+                initGame();
+            });
+            
+            soundToggle.addEventListener('click', () => {
+                soundEnabled = !soundEnabled;
+                if (soundEnabled) {
+                    soundToggle.innerHTML = '<i class="fas fa-volume-up text-xl"></i>';
+                    soundToggle.classList.remove('bg-gray-700');
+                    soundToggle.classList.add('bg-blue-900');
+                } else {
+                    soundToggle.innerHTML = '<i class="fas fa-volume-mute text-xl"></i>';
+                    soundToggle.classList.remove('bg-blue-900');
+                    soundToggle.classList.add('bg-gray-700');
+                }
+            });
+            
+            // Initialize game on load
+            initGame();
+        });
+    </script>
+</body>
+</html>
